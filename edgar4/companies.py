@@ -1,44 +1,93 @@
-from .company import Company
+from functools import lru_cache
+import json
+import os
 import requests
 
+from edgar4.config import base_url, home, log
 
-class Companies:
-    def __init__(self):
-        all_companies_page = requests.get("https://www.sec.gov/Archives/edgar/cik-lookup-data.txt")
-        all_companies_content = all_companies_page.content.decode("latin1")
-        all_companies_array = all_companies_content.split("\n")
-        del all_companies_array[-1]
-        all_companies_array_rev = []
-        for i, item in enumerate(all_companies_array):
-            if item == "":
-                continue
-            _name, _cik = Companies.split_raw_string_to_cik_name(item)
-            all_companies_array[i] = (_name, _cik)
-            all_companies_array_rev.append((_cik, _name))
-        self.all_companies_dict = dict(all_companies_array)
-        self.all_companies_dict_rev = dict(all_companies_array_rev)
 
-    def get_cik_by_company_name(self, name):
-        return self.all_companies_dict[name]
+data_path = 'Archives/edgar/cik-lookup-data.txt'
+url = '%s/%s' % (base_url, data_path)
+cache_fpath = '%s/%s' % (home, data_path)
 
-    def get_company_name_by_cik(self, cik):
-        return self.all_companies_dict_rev[cik]
 
-    def find_company_name(self, words):
-        possible_companies = []
-        words = words.lower()
-        for company in self.all_companies_dict:
-            if all(word in company.lower() for word in words.split(" ")):
-                possible_companies.append(company)
-        return possible_companies
+@lru_cache()
+def all_companies():
+    if os.path.isfile(cache_fpath):
+        log('Loading from %s...' % cache_fpath)
+        with open(cache_fpath, 'r') as fp:
+            data = json.load(fp)
+    else:
+        log('Loading from %s...' % url)
+        raw_text = requests.get(url).content.decode("latin1")
+        data = transform_raw(raw_text)
+        log('Writing to %s...' % cache_fpath)
+        os.makedirs(os.path.dirname(cache_fpath), exist_ok=True)
+        with open(cache_fpath, 'w') as fp:
+            json.dump(data, fp)
+    return data
 
-    @classmethod
-    def split_raw_string_to_cik_name(cls, item):
-        item_arr = item.split(":")[:-1]
-        return ":".join(item_arr[:-1]), item_arr[-1]
-        
 
-def test():
-    com = Company("Oracle Corp", "0001341439")
-    tree = com.get_all_filings(filing_type="10-K")
-    return Company.get_documents(tree)
+def cik_from_name(name):
+    if not is_unique(name, split=False):
+        raise ValueError('"%s" does not map to a unique CIK' % name)
+    return list(matches(name).keys())[0]
+
+
+def is_unique(tag, split=True):
+    return len(matches(tag, split=split)) == 1
+
+
+@lru_cache()
+def matches(words, split=True):
+    if not split:
+        tags = [str(words).lower()]
+    else:
+        tags = words.lower().split(' ')
+    results = {}
+    data = all_companies()
+    for key, (cik, name) in data.items():
+        hit = True
+        for t in tags:
+            if t not in cik and t not in name.lower():
+                hit = False
+                break
+        if hit:
+            results[cik] = name
+    return results
+
+
+def name_from_cik(cik):
+    if not is_unique(cik, split=False):
+        raise ValueError('"%s" does not map to a unique company name' % cik)
+    return list(matches(cik).values())[0]
+
+
+def test(tag):
+    hits = matches(tag)
+    log('Matches for "%s": ' % tag)
+    for cik, name in hits.items():
+        log('  %s (%s)' % (name, cik))
+    if not len(hits):
+        log('  [No matches]')
+
+
+def transform_raw(text):
+    data = {}
+    lines = text.split('\n')
+    for line in lines:
+        toks = line.split(':')[:-1]
+        if len(toks) < 2:
+            continue
+        name, cik = ':'.join(toks[:-1]), toks[-1]
+        if not name or not cik:
+            continue
+        data[name] = [cik, name]
+        data[cik] = [cik, name]
+    return data
+
+
+if __name__ == '__main__':
+    # test('Microsoft')
+    result = cik_from_name('Microsoft Corp')
+    log(result)

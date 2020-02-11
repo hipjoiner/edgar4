@@ -20,7 +20,7 @@ setup(
         'Operating System :: OS Independent',
     ],
     install_requires=[
-        'requests',
+        'requests', 'lxml'
     ],
     entry_points={
         'console_scripts': [
