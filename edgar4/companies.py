@@ -6,21 +6,24 @@ import requests
 from edgar4.config import base_url, home, log
 
 
-data_path = 'Archives/edgar/cik-lookup-data.txt'
-url = '%s/%s' % (base_url, data_path)
-cache_fpath = '%s/%s' % (home, data_path)
+data_path = 'Archives/edgar/cik-lookup-data'
+url = '%s/%s.txt' % (base_url, data_path)
+cache_raw = '%s/%s.txt' % (home, data_path)
+cache_json = '%s/%s.json' % (home, data_path)
 
 
 @lru_cache()
 def all_companies():
-    if os.path.isfile(cache_fpath):
-        with open(cache_fpath, 'r') as fp:
+    if os.path.isfile(cache_json):
+        with open(cache_json, 'r') as fp:
             data = json.load(fp)
     else:
+        os.makedirs(os.path.dirname(cache_raw), exist_ok=True)
         raw_text = requests.get(url).content.decode("latin1")
+        with open(cache_raw, 'w') as fp:
+            fp.write(raw_text)
         data = transform_raw(raw_text)
-        os.makedirs(os.path.dirname(cache_fpath), exist_ok=True)
-        with open(cache_fpath, 'w') as fp:
+        with open(cache_json, 'w') as fp:
             json.dump(data, fp, indent=4)
     return data
 
@@ -42,8 +45,13 @@ def matches(words, split=True):
         tags = [str(words).lower()]
     else:
         tags = words.lower().split(' ')
-    results = {}
     data = all_companies()
+    # The trivial case: exact match
+    if len(tags) == 1 and tags[0] in data:
+        cik, name = data[tags[0]]
+        return {cik: name}
+    # No exact match.  Do it the hard way.
+    results = {}
     for key, (cik, name) in data.items():
         hit = True
         for t in tags:
@@ -72,6 +80,6 @@ def transform_raw(text):
         name, cik = ':'.join(toks[:-1]), toks[-1]
         if not name or not cik:
             continue
-        data[name] = [cik, name]
+        data[name.lower()] = [cik, name]
         data[cik] = [cik, name]
     return data
