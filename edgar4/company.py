@@ -1,8 +1,10 @@
+from functools import lru_cache
 from lxml import html, etree
 import os
 import requests
 
 from edgar4.config import home
+
 
 base_url = 'https://www.sec.gov'
 
@@ -11,30 +13,46 @@ class Company:
     def __init__(self, name, cik):
         self.name = name
         self.cik = cik
-        self.company_url = '%s/cgi-bin/browse-edgar?action=getcompany&CIK=%s' % (base_url, self.cik)
         self._document_urls = []
-        self.sic = ''
-        self.us_state = ''
-        self.get_company_info()
+
+    @property
+    def base_url(self):
+        return 'https://www.sec.gov'
+
+    @property
+    @lru_cache()
+    def company_info(self):
+        doc = requests.get(self.company_url).content
+        page = html.fromstring(doc)
+        if page.xpath("//div[@class='companyInfo']"):
+            return page.xpath("//div[@class='companyInfo']")[0]
+        return None
+
+    @property
+    @lru_cache()
+    def sic(self):
+        if self.company_info:
+            indent_info = self.company_info.getchildren()[1]
+            if len(indent_info.getchildren()) > 2:
+                return indent_info.getchildren()[1].text
+        return ''
+
+    @property
+    @lru_cache()
+    def us_state(self):
+        if self.company_info:
+            indent_info = self.company_info.getchildren()[1]
+            if len(indent_info.getchildren()) > 4:
+                return indent_info.getchildren()[3].text
+        return ''
+
+    @property
+    def company_url(self):
+        return '%s/cgi-bin/browse-edgar?action=getcompany&CIK=%s' % (self.base_url, self.cik)
 
     @property
     def document_urls(self):
         return list(set(self._document_urls))
-
-    def get(self, url):
-        return requests.get(url)
-
-    def get_company_info(self):
-        page = html.fromstring(self.get(self.company_url).content)
-        company_info = None
-        if page.xpath("//div[@class='companyInfo']"):
-            company_info = page.xpath("//div[@class='companyInfo']")[0]
-        if company_info is not None:
-            indent_info = company_info.getchildren()[1]
-            if len(indent_info.getchildren()) > 2:
-                self.sic = indent_info.getchildren()[1].text
-            if len(indent_info.getchildren()) > 4:
-                self.us_state = indent_info.getchildren()[3].text
 
     def get_filings_url(self, filing_type="", prior_to="", ownership="include", no_of_entries=100):
         url = self.company_url + \
@@ -46,7 +64,7 @@ class Company:
 
     def get_all_filings(self, filing_type="", prior_to="", ownership="include", no_of_entries=100):
         url = self.get_filings_url(filing_type, prior_to, ownership, no_of_entries)
-        page = self.get(url)
+        page = requests.get(url)
         return html.fromstring(page.content)
 
     def group_document_type(self, tree, document_type):
@@ -68,14 +86,14 @@ class Company:
         result = []
         for url_group in url_groups:
             for url in url_group:
-                url = base_url + url
+                url = self.base_url + url
                 self._document_urls.append(url)
                 content_page = Company.get_request(url)
                 table = content_page.find_class("tableFile")[0]
                 for row in table.getchildren():
                     if document_type in row.getchildren()[3].text:
                         href = row.getchildren()[2].getchildren()[0].attrib["href"]
-                        href = base_url + href
+                        href = self.base_url + href
                         doc = Company.get_request(href)
                         result.append(doc)
         return result
@@ -86,7 +104,7 @@ class Company:
         result = []
         for url_group in url_groups:
             for url in url_group:
-                url = base_url + url
+                url = self.base_url + url
                 self._document_urls.append(url)
                 content_page = Company.get_request(url)
                 table_file = content_page.find_class("tableFile")
@@ -96,7 +114,7 @@ class Company:
                 for row in table.getchildren():
                     if document_type in row.getchildren()[3].text:
                         href = row.getchildren()[2].getchildren()[0].attrib["href"]
-                        href = base_url + href
+                        href = self.base_url + href
                         doc = Company.get_request(href, isxml=isxml)
                         result.append(doc)
         return result
@@ -106,7 +124,7 @@ class Company:
         elems = tree.xpath('//*[@id="documentsbutton"]')[:no_of_documents]
         result = []
         for elem in elems:
-            url = base_url + elem.attrib["href"]
+            url = self.base_url + elem.attrib["href"]
             content_page = Company.get_request(url)
 
             cache_fpath = home + elem.attrib['href']
@@ -121,7 +139,7 @@ class Company:
             last_row = table.getchildren()[-1]
             href = last_row.getchildren()[2].getchildren()[0].attrib["href"]
             cache_fpath = home + href
-            doc_url = base_url + href
+            doc_url = self.base_url + href
             doc = Company.get_request(doc_url)
             result.append(doc)
 
