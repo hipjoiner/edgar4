@@ -32,7 +32,10 @@ with open(config_fpath, 'r') as fp:
 home = settings['home']
 os.makedirs(home, exist_ok=True)
 
-base_url = 'https://www.sec.gov'
+sec_url = 'https://www.sec.gov'
 
 log_dir = '/'.join([home, 'log'])
 os.makedirs(log_dir, exist_ok=True)
+
+cache_dir = '/'.join([home, 'cache'])
+os.makedirs(cache_dir, exist_ok=True)

@@ -20,7 +20,7 @@ setup(
         'Operating System :: OS Independent',
     ],
     install_requires=[
-        'requests', 'lxml'
+        'requests', 'lxml', 'beautifulsoup4'
     ],
     entry_points={
         'console_scripts': [

@@ -5,12 +5,12 @@ import sys
 
 # Access page
 cik = '0000051143'
-type = '10-K'
+doc_type = '10-K'
 dateb = '20160101'
 
 # Obtain HTML for search page
 base_url = "https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK={}&type={}&dateb={}"
-edgar_resp = requests.get(base_url.format(cik, type, dateb))
+edgar_resp = requests.get(base_url.format(cik, doc_type, dateb))
 edgar_str = edgar_resp.text
 
 # Find the document link
