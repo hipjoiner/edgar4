@@ -30,6 +30,7 @@ class Filing:
             # if 'INS' in cells[3].text:
             if 'XML' in cells[3].text:
                 xbrl_link = 'https://www.sec.gov' + cells[2].a['href']
+                print('XBRL link: {}'.format(xbrl_link))
         # Obtain XBRL text from document
         xbrl_resp = requests.get(xbrl_link)
         xbrl_str = xbrl_resp.text
@@ -37,5 +38,6 @@ class Filing:
         soup = BeautifulSoup(xbrl_str, 'lxml')
         tag_list = soup.find_all()
         for tag in tag_list:
-            if tag.name == 'us-gaap:stockholdersequity':
-                print("Stockholder's equity: " + tag.text)
+            # if tag.name == 'us-gaap:stockholdersequity':
+            #     print("Stockholder's equity: " + tag.text)
+            print('{} | {}'.format(tag.name, ' '.join(str(tag.text[:100]).split('\n'))))
